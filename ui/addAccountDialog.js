@@ -13,29 +13,12 @@ import * as LogoFetcher from "../lib/logoFetcher.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Safely read text from an St.Entry regardless of GNOME Shell version.
- * Some builds expose .text directly; others require going through clutter_text.
- */
 function entryGetText(entry) {
-  try {
-    if (entry.clutter_text && typeof entry.clutter_text.get_text === "function") {
-      return entry.clutter_text.get_text() ?? "";
-    }
-    return entry.get_text?.() ?? entry.text ?? "";
-  } catch (_) {
-    return "";
-  }
+  return entry.clutter_text.get_text();
 }
 
 function entrySetText(entry, value) {
-  try {
-    if (entry.clutter_text && typeof entry.clutter_text.set_text === "function") {
-      entry.clutter_text.set_text(value ?? "");
-      return;
-    }
-    entry.set_text?.(value ?? "");
-  } catch (_) {}
+  entry.clutter_text.set_text(value ?? "");
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -215,13 +198,8 @@ export const AddAccountDialog = GObject.registerClass(
         x_expand: true,
       });
       this._submitBtn.connect("clicked", () => {
-        // Guard: prevent double-tap while async is running
         if (this._busy) return;
-        this._onAddManual().catch((e) => {
-          logError(e, "[TOTP] _onAddManual unhandled");
-          this._setStatus(`Unexpected error: ${e.message}`, "error");
-          this._setBusy(false);
-        });
+        this._onAddManual();
       });
       root.add_child(this._submitBtn);
 
@@ -361,54 +339,40 @@ export const AddAccountDialog = GObject.registerClass(
 
     async _fetchLogo(issuer, siteUrl) {
       const source = siteUrl ?? issuer;
-      try {
-        const logo = await LogoFetcher.fetchLogo(source);
+      const logo = await LogoFetcher.fetchLogo(source);
 
-        // Stale-check: input must not have changed while we were awaiting
-        const curIssuer = entryGetText(this._issuerEntry).trim();
-        const curUrl    = entryGetText(this._siteUrlEntry).trim();
-        const stale = siteUrl
-          ? curUrl !== siteUrl
-          : curIssuer !== issuer;
-        if (stale) return;
+      const curIssuer = entryGetText(this._issuerEntry).trim();
+      const curUrl    = entryGetText(this._siteUrlEntry).trim();
+      const stale = siteUrl
+        ? curUrl !== siteUrl
+        : curIssuer !== issuer;
+      if (stale || !logo?.url) return;
 
-        if (logo?.url) {
-          this._selectedLogoUrl = logo.url;
-          this._selectedLogoPath = logo.path ?? null;
-          this._selectedLogoSource = source;
-          this._showLogoPreview(logo.path || logo.url);
-        }
-      } catch (_) {
-        // Silently ignore logo fetch failures
-      }
+      this._selectedLogoUrl = logo.url;
+      this._selectedLogoPath = logo.path ?? null;
+      this._selectedLogoSource = source;
+      this._showLogoPreview(logo.path || logo.url);
     }
 
     _showLogoPreview(logoRef) {
-      try {
-        const iconProps = {
-          icon_size: 18,
-          style_class: "totp-logo-icon",
-        };
+      const iconProps = {
+        icon_size: 18,
+        style_class: "totp-logo-icon",
+      };
 
-        if (logoRef && !String(logoRef).startsWith("http")) {
-          const file = Gio.File.new_for_path(logoRef);
-          if (!file.query_exists(null)) {
-            throw new Error("Logo file does not exist");
-          }
-          iconProps.gicon = new Gio.FileIcon({
-            file,
-          });
-        } else {
-          iconProps.icon_name = "image-x-generic-symbolic";
+      if (logoRef && !String(logoRef).startsWith("http")) {
+        const file = Gio.File.new_for_path(logoRef);
+        if (!file.query_exists(null)) {
+          this._logoPreview.visible = false;
+          return;
         }
-
-        this._logoPreview.set_child(new St.Icon({
-          ...iconProps,
-        }));
-        this._logoPreview.visible = true;
-      } catch (_) {
-        this._logoPreview.visible = false;
+        iconProps.gicon = new Gio.FileIcon({ file });
+      } else {
+        iconProps.icon_name = "image-x-generic-symbolic";
       }
+
+      this._logoPreview.set_child(new St.Icon(iconProps));
+      this._logoPreview.visible = true;
     }
 
     // ── Dropdown cycling ───────────────────────────────────────────────────────
@@ -461,99 +425,85 @@ export const AddAccountDialog = GObject.registerClass(
     // ── Main submit handler ────────────────────────────────────────────────────
 
     async _onAddManual() {
-      // ── Read & sanitise inputs ──────────────────────────────────────────────
-      const issuer    = entryGetText(this._issuerEntry).trim();
-      const label     = entryGetText(this._labelEntry).trim();
-      const siteUrl   = entryGetText(this._siteUrlEntry).trim();
-      const rawSecret = entryGetText(this._secretEntry).trim();
-      const secret    = rawSecret.replace(/\s+/g, "").toUpperCase();
-
-      const algorithm = this._selectedAlgorithm ?? "SHA1";
-      const digits    = this._selectedDigits    ?? 6;
-      const period    = this._selectedPeriod    ?? 30;
-      const logoSource = siteUrl || issuer;
-
-      // ── Validation ─────────────────────────────────────────────────────────
-      if (!this._editingAccount && !secret) {
-        this._setStatus("Secret key is required.", "error");
-        return;
-      }
-      if (secret && !/^[A-Z2-7]+=*$/.test(secret)) {
-        this._setStatus("Secret must be a valid Base32 string.", "error");
-        return;
-      }
-      if (!issuer && !label) {
-        this._setStatus("Please enter at least a service name or account.", "error");
-        return;
-      }
-
-      // Ensure a just-entered URL has a chance to resolve before persisting.
-      if (logoSource && (this._selectedLogoSource !== logoSource || !this._selectedLogoPath)) {
-        this._setBusy(true);
-        this._setStatus("Fetching logo…");
-        const logo = await LogoFetcher.fetchLogo(logoSource);
-        if (logo?.url) {
-          this._selectedLogoUrl = logo.url;
-          this._selectedLogoPath = logo.path ?? null;
-          this._selectedLogoSource = logoSource;
-          this._showLogoPreview(logo.path || logo.url);
-        }
-      }
-
-      // ── Build payload ───────────────────────────────────────────────────────
-      const accountData = {
-        label:    label,
-        issuer:   issuer || "Unknown",
-        siteUrl:  siteUrl  || null,
-        algorithm,
-        digits,
-        period,
-        logoUrl:  this._selectedLogoUrl || null,
-        logoPath: this._selectedLogoPath || null,
-      };
-
-      this._setBusy(true);
-
       try {
-        if (this._editingAccount) {
-          // ── Edit mode ────────────────────────────────────────────────────
-          this._setStatus("Saving changes…");
-          log(`[TOTP] Updating account id=${this._editingAccount.id}`);
+        const issuer    = entryGetText(this._issuerEntry).trim();
+        const label     = entryGetText(this._labelEntry).trim();
+        const siteUrl   = entryGetText(this._siteUrlEntry).trim();
+        const rawSecret = entryGetText(this._secretEntry).trim();
+        const secret    = rawSecret.replace(/\s+/g, "").toUpperCase();
 
-          const ok = await AccountManager.updateAccountWithSecret(
+        const algorithm = this._selectedAlgorithm ?? "SHA1";
+        const digits    = this._selectedDigits    ?? 6;
+        const period    = this._selectedPeriod    ?? 30;
+        const logoSource = siteUrl || issuer;
+
+        if (!this._editingAccount && !secret) {
+          this._setStatus("Secret key is required.", "error");
+          return;
+        }
+        if (secret && !/^[A-Z2-7]+=*$/.test(secret)) {
+          this._setStatus("Secret must be a valid Base32 string.", "error");
+          return;
+        }
+        if (!issuer && !label) {
+          this._setStatus("Please enter at least a service name or account.", "error");
+          return;
+        }
+
+        if (logoSource && (this._selectedLogoSource !== logoSource || !this._selectedLogoPath)) {
+          this._setBusy(true);
+          this._setStatus("Fetching logo…");
+          const logo = await LogoFetcher.fetchLogo(logoSource);
+          if (logo?.url) {
+            this._selectedLogoUrl = logo.url;
+            this._selectedLogoPath = logo.path ?? null;
+            this._selectedLogoSource = logoSource;
+            this._showLogoPreview(logo.path || logo.url);
+          }
+        }
+
+        const accountData = {
+          label,
+          issuer: issuer || "Unknown",
+          siteUrl: siteUrl || null,
+          algorithm,
+          digits,
+          period,
+          logoUrl: this._selectedLogoUrl || null,
+          logoPath: this._selectedLogoPath || null,
+        };
+
+        this._setBusy(true);
+
+        if (this._editingAccount) {
+          this._setStatus("Saving changes…");
+
+          await AccountManager.updateAccountWithSecret(
             this._editingAccount.id,
             accountData,
-            secret || null,   // null = keep existing secret
+            secret || null,
           );
-          log(`[TOTP] updateAccountWithSecret → ${ok}`);
 
           this._setStatus("Account updated successfully.", "ok");
           this.emit("account-updated");
-
         } else {
-          // ── Add mode ─────────────────────────────────────────────────────
           this._setStatus("Adding account…");
-          log(`[TOTP] Adding new account issuer=${accountData.issuer}`);
-
           await AccountManager.addAccount({ ...accountData, secret });
 
           this._setStatus("Account added successfully.", "ok");
           this.emit("account-added");
         }
 
-        // Reset fields
         this._resetFields();
 
-        // Auto-close after a short confirmation delay
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 900, () => {
           this.close();
           return GLib.SOURCE_REMOVE;
         });
-
       } catch (e) {
-        logError(e, "[TOTP] _onAddManual");
+        console.error(`[TOTP] _onAddManual: ${e.message}`);
         this._setStatus(`Error: ${e.message}`, "error");
-        this._setBusy(false);   // re-enable button on error so user can retry
+        this._setBusy(false);
       }
     }
 

@@ -23,12 +23,17 @@ export default class TOTPAuthenticatorExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
 
-        // Load accounts from storage
-        AccountManager.loadAccounts();
-
         // Create panel button
         this._panelButton = new PanelButton(this._settings, this.path);
         Main.panel.addToStatusArea(this.metadata.uuid, this._panelButton);
+
+        AccountManager.loadAccounts().then(() => {
+            if (this._panelButton) {
+                this._panelButton.refresh();
+            }
+        }).catch(e => {
+            console.error(`[TOTP] Failed to load accounts: ${e.message}`);
+        });
 
         // Check for missing dependencies and notify user
         this._checkDependencies();
@@ -126,7 +131,7 @@ export default class TOTPAuthenticatorExtension extends Extension {
                 }
             );
         } catch (e) {
-            log(`[TOTP] Failed to set up screen lock listener: ${e.message}`);
+            console.error(`[TOTP] Failed to set up screen lock listener: ${e.message}`);
         }
     }
 

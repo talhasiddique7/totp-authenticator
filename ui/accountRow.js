@@ -14,9 +14,8 @@ import { generateTOTP, getTimeRemaining } from "../lib/totp.js";
 import * as AccountManager from "../lib/accountManager.js";
 import * as LogoFetcher from "../lib/logoFetcher.js";
 
-const COPY_FEEDBACK_DURATION_MS = 2000;
-const CLIPBOARD_CLEAR_TIMEOUT_S = 30;
 const EXPIRING_THRESHOLD_S = 7;
+const COPY_FEEDBACK_DURATION_MS = 1200;
 
 function cssQuotedFontFamily(fontFamily) {
   return `"${String(fontFamily || "Monospace").replace(/["\\]/g, "")}"`;
@@ -54,8 +53,6 @@ export const AccountRow = GObject.registerClass(
       this._currentCode = "";
       this._codeFont = options.codeFont || "Monospace";
       this._codeFontSize = options.codeFontSize || 28;
-      this._showNotifications = options.showNotifications ?? true;
-      this._clipboardTimeoutId = 0;
       this._copyFeedbackTimeoutId = 0;
       this._isDestroyed = false;
 
@@ -126,14 +123,6 @@ export const AccountRow = GObject.registerClass(
         y_align: Clutter.ActorAlign.CENTER,
       });
 
-      // Countdown label
-      this._countdownLabel = new St.Label({
-        text: "",
-        style_class: "totp-countdown-label",
-        x_align: Clutter.ActorAlign.CENTER,
-      });
-      actionsBox.add_child(this._countdownLabel);
-
       // Progress arc (simple text-based for reliability)
       this._progressBar = new St.DrawingArea({
         width: 32,
@@ -144,7 +133,6 @@ export const AccountRow = GObject.registerClass(
       this._progressBar.connect("repaint", () => this._paintArc());
       actionsBox.add_child(this._progressBar);
 
-      // Copy button
       this._copyButton = new St.Button({
         style_class: "totp-copy-button",
         child: new St.Icon({
@@ -154,7 +142,7 @@ export const AccountRow = GObject.registerClass(
         y_align: Clutter.ActorAlign.CENTER,
         x_align: Clutter.ActorAlign.CENTER,
       });
-      this._copyButton.connect("clicked", () => this._onCopyClicked());
+      this._copyButton.connect("clicked", () => this._copyCodeToClipboard());
       actionsBox.add_child(this._copyButton);
 
       this.add_child(actionsBox);
@@ -265,7 +253,6 @@ export const AccountRow = GObject.registerClass(
 
       const editItem = new PopupMenu.PopupMenuItem("Edit Account");
       editItem.connect("activate", () => {
-        log(`[TOTP] Emitting account-edit for id=${this._account.id}`);
         this.emit("account-edit", this._account.id);
       });
       this._contextMenu.addMenuItem(editItem);
@@ -286,7 +273,6 @@ export const AccountRow = GObject.registerClass(
 
       const deleteItem = new PopupMenu.PopupMenuItem("Delete Account");
       deleteItem.connect("activate", () => {
-        log(`[TOTP] Emitting account-delete for id=${this._account.id}`);
         this.emit("account-delete", this._account.id);
       });
       this._contextMenu.addMenuItem(deleteItem);
@@ -325,9 +311,7 @@ export const AccountRow = GObject.registerClass(
         const mid = Math.ceil(code.length / 2);
         this._codeLabel.text = `${code.substring(0, mid)} ${code.substring(mid)}`;
 
-        // Update countdown
         const remaining = getTimeRemaining(this._account.period || 30);
-        this._countdownLabel.text = `${remaining}s`;
 
         // Update visual state based on remaining time
         this._updateExpiryState(remaining);
@@ -337,7 +321,7 @@ export const AccountRow = GObject.registerClass(
       } catch (e) {
         this._codeLabel.text = "Error";
         this._codeLabel.add_style_class_name("totp-code-error");
-        log(
+        console.error(
           `[TOTP] Code generation error for ${this._account.issuer}: ${e.message}`,
         );
       }
@@ -350,47 +334,37 @@ export const AccountRow = GObject.registerClass(
     _updateExpiryState(remaining) {
       if (remaining <= EXPIRING_THRESHOLD_S) {
         this._codeLabel.add_style_class_name("totp-code-expiring");
-        this._countdownLabel.add_style_class_name("totp-countdown-expiring");
       } else {
         this._codeLabel.remove_style_class_name("totp-code-expiring");
-        this._countdownLabel.remove_style_class_name("totp-countdown-expiring");
       }
     }
 
     /**
-     * Handle copy button click.
+     * Copy the current OTP code to the clipboard so it can be pasted.
      * @private
      */
-    _onCopyClicked() {
+    _copyCodeToClipboard() {
       if (!this._currentCode) return;
 
-      // Copy to clipboard
       const clipboard = St.Clipboard.get_default();
       clipboard.set_text(St.ClipboardType.CLIPBOARD, this._currentCode);
 
-      // Update last used timestamp
       AccountManager.touchAccount(this._account.id);
-
-      // Show copy feedback
       this._showCopyFeedback();
-
-      // Schedule clipboard clear
-      this._scheduleClearClipboard();
-
-      // Emit signal
       this.emit("code-copied", this._account.id);
     }
 
     /**
-     * Show visual feedback after copying.
+     * Show short visual feedback after copying.
      * @private
      */
     _showCopyFeedback() {
+      if (!this._copyButton) return;
+
       const icon = this._copyButton.child;
       icon.icon_name = "emblem-ok-symbolic";
       this._copyButton.add_style_class_name("totp-copy-success");
 
-      // Clear previous feedback timeout
       if (this._copyFeedbackTimeoutId) {
         GLib.source_remove(this._copyFeedbackTimeoutId);
       }
@@ -399,41 +373,11 @@ export const AccountRow = GObject.registerClass(
         GLib.PRIORITY_DEFAULT,
         COPY_FEEDBACK_DURATION_MS,
         () => {
-          if (!this._isDestroyed) {
+          if (!this._isDestroyed && this._copyButton) {
             icon.icon_name = "edit-copy-symbolic";
             this._copyButton.remove_style_class_name("totp-copy-success");
           }
           this._copyFeedbackTimeoutId = 0;
-          return GLib.SOURCE_REMOVE;
-        },
-      );
-    }
-
-    /**
-     * Schedule automatic clipboard clearing for security.
-     * @private
-     */
-    _scheduleClearClipboard() {
-      if (this._clipboardTimeoutId) {
-        GLib.source_remove(this._clipboardTimeoutId);
-      }
-
-      this._clipboardTimeoutId = GLib.timeout_add_seconds(
-        GLib.PRIORITY_DEFAULT,
-        CLIPBOARD_CLEAR_TIMEOUT_S,
-        () => {
-          if (!this._isDestroyed) {
-            const clipboard = St.Clipboard.get_default();
-            clipboard.set_text(St.ClipboardType.CLIPBOARD, "");
-
-            if (this._showNotifications) {
-              Main.notify(
-                "TOTP Authenticator",
-                "OTP code cleared from clipboard",
-              );
-            }
-          }
-          this._clipboardTimeoutId = 0;
           return GLib.SOURCE_REMOVE;
         },
       );
@@ -471,19 +415,15 @@ export const AccountRow = GObject.registerClass(
         return false;
       }
 
-      try {
-        const file = Gio.File.new_for_path(logoRef);
-        if (!file.query_exists(null)) return false;
+      const file = Gio.File.new_for_path(logoRef);
+      if (!file.query_exists(null)) return false;
 
-        this._avatar.child = new St.Icon({
-          gicon: new Gio.FileIcon({ file }),
-          icon_size: 24,
-          style_class: "totp-account-avatar-logo",
-        });
-        return true;
-      } catch (e) {
-        return false;
-      }
+      this._avatar.child = new St.Icon({
+        gicon: new Gio.FileIcon({ file }),
+        icon_size: 24,
+        style_class: "totp-account-avatar-logo",
+      });
+      return true;
     }
 
     /**
@@ -507,27 +447,22 @@ export const AccountRow = GObject.registerClass(
      * @private
      */
     async _fetchAndSetLogo() {
-      try {
-        // Use siteUrl if available, otherwise use issuer
-        const logo = await LogoFetcher.fetchLogo(
-          this._account.siteUrl || this._account.issuer,
-        );
-        if (logo?.url && !this._isDestroyed) {
-          this._account.logoUrl = logo.url;
-          this._account.logoPath = logo.path ?? null;
+      const logo = await LogoFetcher.fetchLogo(
+        this._account.siteUrl || this._account.issuer,
+      );
+      if (!logo?.url || this._isDestroyed) return;
 
-          if (logo.path) {
-            this._setLogoAvatar(logo.path);
-          }
+      this._account.logoUrl = logo.url;
+      this._account.logoPath = logo.path ?? null;
 
-          AccountManager.updateAccount(this._account.id, {
-            logoUrl: logo.url,
-            logoPath: logo.path ?? null,
-          });
-        }
-      } catch (e) {
-        // Silently fail, keep letter avatar
+      if (logo.path) {
+        this._setLogoAvatar(logo.path);
       }
+
+      AccountManager.updateAccount(this._account.id, {
+        logoUrl: logo.url,
+        logoPath: logo.path ?? null,
+      });
     }
 
     /**
@@ -536,11 +471,6 @@ export const AccountRow = GObject.registerClass(
      */
     _onDestroy() {
       this._isDestroyed = true;
-
-      if (this._clipboardTimeoutId) {
-        GLib.source_remove(this._clipboardTimeoutId);
-        this._clipboardTimeoutId = 0;
-      }
 
       if (this._copyFeedbackTimeoutId) {
         GLib.source_remove(this._copyFeedbackTimeoutId);

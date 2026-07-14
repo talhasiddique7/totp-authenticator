@@ -1,10 +1,10 @@
 {
     "uuid": "gnome-totp-authenticator@talhasiddique7",
     "name": "TOTP Authenticator",
-    "description": "A native TOTP authenticator for the GNOME desktop. Add accounts via QR code or manual entry, view live auto-refreshing OTP codes, and copy to clipboard with a single click. Secrets are stored securely in GNOME Keyring.",
+    "description": "A native TOTP authenticator for the GNOME desktop. Add accounts via QR code or manual entry, view live auto-refreshing OTP codes, and keep secrets stored securely in GNOME Keyring.",
     "version": 1,
     "shell-version": ["45", "46", "47", "48", "49", "50"],
-    "settings-schema": "org.gnome.shell.extensions.totp-auth",
+    "settings-schema": "org.gnome.shell.extensions.gnome-totp-authenticator",
     "url": "https://github.com/talhasiddique7/totp",
     "gettext-domain": "gnome-totp-authenticator",
     "icon": "icons/shield-symbolic.svg"

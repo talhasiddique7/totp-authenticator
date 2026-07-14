@@ -100,17 +100,9 @@ export default class TOTPPreferences extends ExtensionPreferences {
         // ── Behavior group ──
         const behaviorGroup = new Adw.PreferencesGroup({
             title: 'Behavior',
-            description: 'Notifications and clipboard settings',
+            description: 'Display behavior',
         });
         generalPage.add(behaviorGroup);
-
-        // Show notifications
-        const notifRow = new Adw.SwitchRow({
-            title: 'Show Notifications',
-            subtitle: 'Notify when a code is copied or clipboard is cleared',
-        });
-        settings.bind('show-notifications', notifRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        behaviorGroup.add(notifRow);
 
         // Dark icons
         const darkRow = new Adw.SwitchRow({

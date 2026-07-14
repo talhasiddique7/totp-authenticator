@@ -1,20 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="gnome-totp-authenticator">
-  <enum id="org.gnome.shell.extensions.totp-auth.SortOrder">
+  <enum id="org.gnome.shell.extensions.gnome-totp-authenticator.SortOrder">
     <value nick="manual" value="0"/>
     <value nick="alphabetical" value="1"/>
     <value nick="last-used" value="2"/>
   </enum>
 
-  <schema id="org.gnome.shell.extensions.totp-auth"
-          path="/org/gnome/shell/extensions/totp-auth/">
-
-    <!-- Display Settings -->
-    <key name="show-notifications" type="b">
-      <default>true</default>
-      <summary>Show notifications</summary>
-      <description>Show desktop notifications when OTP codes are copied or clipboard is cleared.</description>
-    </key>
+  <schema id="org.gnome.shell.extensions.gnome-totp-authenticator"
+          path="/org/gnome/shell/extensions/gnome-totp-authenticator/">
 
     <key name="sort-order" type="s">
       <default>'manual'</default>

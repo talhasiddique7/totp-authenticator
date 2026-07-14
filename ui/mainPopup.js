@@ -17,14 +17,7 @@ import * as AccountManager from '../lib/accountManager.js';
 const REFRESH_INTERVAL_MS = 1000;
 
 function entryText(entry) {
-    try {
-        if (entry.clutter_text && typeof entry.clutter_text.get_text === 'function') {
-            return entry.clutter_text.get_text() || '';
-        }
-        return entry.get_text?.() || entry.text || '';
-    } catch (e) {
-        return '';
-    }
+    return entry.clutter_text.get_text();
 }
 
 export const MainPopup = GObject.registerClass(
@@ -171,17 +164,11 @@ class MainPopup extends St.BoxLayout {
             const codeFontSize = this._settings
                 ? this._settings.get_int('code-size')
                 : 28;
-            const showNotifications = this._settings
-                ? this._settings.get_boolean('show-notifications')
-                : true;
-
             for (const account of accounts) {
                 const row = new AccountRow(account, {
                     codeFont,
                     codeFontSize,
-                    showNotifications,
                 });
-                row.connect('code-copied', () => {});
                 row.connect('account-edit', (_w, id) => this._onEditAccount(id));
                 row.connect('account-delete', (_w, id) => this._onDeleteAccount(id));
                 row.connect('account-move-up', (_w, id) => {
@@ -245,60 +232,47 @@ class MainPopup extends St.BoxLayout {
     }
 
     _onAddAccount(tab = null) {
-        log(`[TOTP] _onAddAccount called with tab=${tab}`);
         const dialog = new AddAccountDialog();
-        log('[TOTP] AddAccountDialog created');
         dialog.connect('account-added', () => {
-            log('[TOTP] account-added signal received');
             this.refreshAccounts();
         });
         dialog.connect('account-updated', () => {
-            log('[TOTP] account-updated signal received');
             this.refreshAccounts();
         });
         dialog.open();
-        log('[TOTP] AddAccountDialog opened');
         if (tab === 'manual' && dialog._issuerEntry) {
             dialog._issuerEntry.grab_key_focus();
         }
     }
 
     _onEditAccount(id) {
-        log(`[TOTP] _onEditAccount called with id=${id}`);
         const account = AccountManager.getAccount(id);
         if (!account) {
-            log(`[TOTP] _onEditAccount: account not found for id=${id}`);
             return;
         }
-        log(`[TOTP] _onEditAccount: opening dialog for issuer=${account.issuer}`);
 
         const dialog = new AddAccountDialog();
         dialog.setAccount(account);
         dialog.connect('account-updated', () => {
-            log('[TOTP] account-updated signal received, refreshing');
             this.refreshAccounts();
         });
         dialog.open();
     }
 
     async _onDeleteAccount(id) {
-        log(`[TOTP] _onDeleteAccount called with id=${id}`);
         const account = AccountManager.getAccount(id);
         if (!account) {
-            log(`[TOTP] _onDeleteAccount: account not found for id=${id}`);
             return;
         }
 
         const displayName = account.issuer || account.label || 'this account';
         const confirmDialog = new ConfirmDeleteDialog(displayName);
         confirmDialog.connect('confirmed', async () => {
-            log('[TOTP] Delete confirmed');
             try {
-                const result = await AccountManager.deleteAccount(id);
-                log(`[TOTP] deleteAccount result=${result}`);
+                await AccountManager.deleteAccount(id);
                 this.refreshAccounts();
             } catch (e) {
-                log(`[TOTP] Failed to delete account: ${e.message}`);
+                console.error(`[TOTP] Failed to delete account: ${e.message}`);
             }
         });
         confirmDialog.open();
@@ -310,7 +284,7 @@ class MainPopup extends St.BoxLayout {
                 'gnome-extensions prefs gnome-totp-authenticator@talhasiddique7'
             );
         } catch (e) {
-            log(`[TOTP] Failed to open settings: ${e.message}`);
+            console.error(`[TOTP] Failed to open settings: ${e.message}`);
         }
     }
 

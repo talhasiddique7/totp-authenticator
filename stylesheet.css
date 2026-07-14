@@ -149,17 +149,6 @@
     padding: 0 4px;
 }
 
-.totp-countdown-label {
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.45);
-    text-align: center;
-}
-
-.totp-countdown-expiring {
-    color: #e89406;
-    font-weight: bold;
-}
-
 /* ── Progress Arc ── */
 .totp-progress-arc {
     margin: 2px 0;

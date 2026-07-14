@@ -9,7 +9,6 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { MainPopup } from './mainPopup.js';
-import * as AccountManager from '../lib/accountManager.js';
 
 export const PanelButton = GObject.registerClass(
 class PanelButton extends PanelMenu.Button {

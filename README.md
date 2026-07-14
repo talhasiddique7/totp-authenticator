@@ -7,7 +7,6 @@ A native TOTP (Time-Based One-Time Password) authenticator extension for the GNO
 - **🔐 Live OTP Codes** — Auto-refreshing TOTP codes in a sleek dropdown panel
 - **📷 QR Code Scanning** — Add accounts by capturing QR codes from your screen or webcam
 - **⌨️ Manual Entry** — Enter secret keys manually with full configuration options
-- **📋 One-Click Copy** — Copy codes to clipboard with automatic 30-second auto-clear
 - **🔒 Secure Storage** — Secrets stored exclusively in GNOME Keyring (never on disk)
 - **⏱ Countdown Timer** — Visual countdown arc with color transitions (blue → amber → red)
 - **🔍 Search** — Quickly filter accounts when you have many
@@ -88,13 +87,6 @@ sudo pacman -S zbar
 - Enter the **Secret Key** (Base32 format)
 - Optionally adjust Algorithm, Digits, and Period
 
-### Copying Codes
-
-- Click the **copy icon** next to any code
-- The code is copied to your clipboard
-- Clipboard is **automatically cleared after 30 seconds** for security
-- A ✓ checkmark confirms the copy
-
 ### Managing Accounts
 
 - **Right-click** any account for options: Edit, Delete, Move Up, Move Down
@@ -112,7 +104,6 @@ Or click the ⚙ gear icon in the popup header.
 ## 🔒 Security
 
 - **Secrets** are stored exclusively in **GNOME Keyring** — never written to disk
-- **Clipboard** is automatically cleared 30 seconds after copying a code
 - **Local code generation** — TOTP generation stays local; optional logo fetching only downloads service favicons
 - **Screen lock integration** — popup closes when the screen locks
 - **No logging** — secrets are never printed to console or journal
@@ -125,7 +116,6 @@ Or click the ⚙ gear icon in the popup header.
 | Code Size | 28pt | Font size for OTP codes |
 | Popup Width | 360px | Dropdown panel width (320-480) |
 | Sort Order | Manual | Manual, Alphabetical, or Last Used |
-| Notifications | On | Desktop notifications for copy/clear |
 | Clock Drift | ±1 window | Tolerance for clock skew |
 | Lock on Screen Lock | On | Close popup when screen locks |
 
