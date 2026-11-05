@@ -10,6 +10,8 @@ import * as ModalDialog from "resource:///org/gnome/shell/ui/modalDialog.js";
 
 import * as AccountManager from "../lib/accountManager.js";
 import * as LogoFetcher from "../lib/logoFetcher.js";
+import * as QRScanner from "../lib/qrScanner.js";
+import { parseOtpauthUri } from "../lib/otpauth.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -58,7 +60,7 @@ export const AddAccountDialog = GObject.registerClass(
     _buildUI() {
       // Root container
       const root = new St.BoxLayout({
-        vertical: true,
+        orientation: Clutter.Orientation.VERTICAL,
         style_class: "totp-dialog-root",
         x_expand: true,
       });
@@ -75,7 +77,7 @@ export const AddAccountDialog = GObject.registerClass(
       });
       titleBar.add_child(titleIcon);
 
-      const titleStack = new St.BoxLayout({ vertical: true });
+      const titleStack = new St.BoxLayout({ orientation: Clutter.Orientation.VERTICAL });
       this._titleLabel = new St.Label({
         text: "Add Account",
         style_class: "totp-dialog-title",
@@ -92,13 +94,29 @@ export const AddAccountDialog = GObject.registerClass(
       // Separator
       root.add_child(new St.Widget({ style_class: "totp-separator", x_expand: true }));
 
-      // ── Coming soon pill ───────────────────────────────────────────────────
-      const pill = new St.BoxLayout({ style_class: "totp-coming-soon-pill" });
-      pill.add_child(new St.Label({
-        text: "📱  QR Code Scanning — Coming Soon",
-        style_class: "totp-coming-soon-label",
-      }));
-      root.add_child(pill);
+      const qrActions = new St.BoxLayout({
+        style_class: "totp-form-row",
+        x_expand: true,
+      });
+      this._scanScreenButton = new St.Button({
+        label: "Capture Screen Area",
+        style_class: "totp-button totp-button-secondary",
+        reactive: true,
+        can_focus: true,
+        x_expand: true,
+      });
+      this._scanScreenButton.connect("clicked", () => this.scanQrCode("screen"));
+      this._scanCameraButton = new St.Button({
+        label: "Use Camera",
+        style_class: "totp-button totp-button-secondary",
+        reactive: true,
+        can_focus: true,
+        x_expand: true,
+      });
+      this._scanCameraButton.connect("clicked", () => this.scanQrCode("camera"));
+      qrActions.add_child(this._scanScreenButton);
+      qrActions.add_child(this._scanCameraButton);
+      root.add_child(qrActions);
 
       // ── Section header ─────────────────────────────────────────────────────
       root.add_child(new St.Label({
@@ -111,7 +129,6 @@ export const AddAccountDialog = GObject.registerClass(
 
       const issuerCell = this._makeCell("SERVICE / ISSUER");
       this._issuerEntry = this._makeEntry("e.g. Google, GitHub");
-      this._issuerEntry.clutter_text.connect("text-changed", () => this._onIssuerChanged());
       issuerCell.add_child(this._issuerEntry);
 
       // Logo preview inline under issuer
@@ -224,7 +241,10 @@ export const AddAccountDialog = GObject.registerClass(
     // ── Small factory helpers ─────────────────────────────────────────────────
 
     _makeCell(labelText) {
-      const cell = new St.BoxLayout({ vertical: true, x_expand: true });
+      const cell = new St.BoxLayout({
+        orientation: Clutter.Orientation.VERTICAL,
+        x_expand: true,
+      });
       cell.add_child(new St.Label({
         text: labelText,
         style_class: "totp-field-label",
@@ -264,6 +284,39 @@ export const AddAccountDialog = GObject.registerClass(
       this._populateFromAccount();
     }
 
+    focusPrimaryField() {
+      this._issuerEntry?.grab_key_focus();
+    }
+
+    async scanQrCode(source = "screen") {
+      if (this._busy) return;
+
+      this._setBusy(true);
+      this._setStatus("Scanning for an otpauth QR code…");
+      try {
+        const uri = source === "camera"
+          ? await QRScanner.scanCamera()
+          : await QRScanner.scanScreenArea();
+        const account = parseOtpauthUri(uri);
+        if (account.type !== "totp") {
+          throw new Error("HOTP accounts are not supported");
+        }
+
+        entrySetText(this._issuerEntry, account.issuer);
+        entrySetText(this._labelEntry, account.label);
+        entrySetText(this._secretEntry, account.secret);
+        this._selectedAlgorithm = account.algorithm;
+        this._selectedDigits = account.digits;
+        this._selectedPeriod = account.period;
+        this._refreshDropdownLabels();
+        this._setStatus("QR code decoded. Review the details before saving.", "ok");
+      } catch (error) {
+        this._setStatus(`QR scan failed: ${error.message}`, "error");
+      } finally {
+        this._setBusy(false);
+      }
+    }
+
     // ── Populate fields from existing account ─────────────────────────────────
 
     _populateFromAccount() {
@@ -287,35 +340,16 @@ export const AddAccountDialog = GObject.registerClass(
       if (a.logoUrl || a.logoPath) {
         this._selectedLogoUrl = a.logoUrl;
         this._selectedLogoPath = a.logoPath ?? null;
-        this._selectedLogoSource = a.siteUrl || a.issuer || null;
+        this._selectedLogoSource = a.siteUrl || null;
         this._showLogoPreview(a.logoPath || a.logoUrl);
       }
     }
 
     // ── Logo fetching ──────────────────────────────────────────────────────────
 
-    _onIssuerChanged() {
-      const issuer = entryGetText(this._issuerEntry).trim();
-      const url = entryGetText(this._siteUrlEntry).trim();
-
-      if (url) {
-        this._scheduleLogo(() => this._fetchLogo(null, url));
-      } else {
-        this._scheduleLogo(issuer ? () => this._fetchLogo(issuer, null) : null);
-      }
-    }
-
     _onSiteUrlChanged() {
       const url    = entryGetText(this._siteUrlEntry).trim();
-      const issuer = entryGetText(this._issuerEntry).trim();
-
-      if (url) {
-        this._scheduleLogo(() => this._fetchLogo(null, url));
-      } else if (issuer.length >= 2) {
-        this._scheduleLogo(() => this._fetchLogo(issuer, null));
-      } else {
-        this._scheduleLogo(null);
-      }
+      this._scheduleLogo(url ? () => this._fetchLogo(url) : null);
     }
 
     _scheduleLogo(fn) {
@@ -337,20 +371,15 @@ export const AddAccountDialog = GObject.registerClass(
       });
     }
 
-    async _fetchLogo(issuer, siteUrl) {
-      const source = siteUrl ?? issuer;
-      const logo = await LogoFetcher.fetchLogo(source);
+    async _fetchLogo(siteUrl) {
+      const logo = await LogoFetcher.fetchLogo(siteUrl);
 
-      const curIssuer = entryGetText(this._issuerEntry).trim();
       const curUrl    = entryGetText(this._siteUrlEntry).trim();
-      const stale = siteUrl
-        ? curUrl !== siteUrl
-        : curIssuer !== issuer;
-      if (stale || !logo?.url) return;
+      if (curUrl !== siteUrl || !logo?.url) return;
 
       this._selectedLogoUrl = logo.url;
       this._selectedLogoPath = logo.path ?? null;
-      this._selectedLogoSource = source;
+      this._selectedLogoSource = siteUrl;
       this._showLogoPreview(logo.path || logo.url);
     }
 
@@ -435,7 +464,7 @@ export const AddAccountDialog = GObject.registerClass(
         const algorithm = this._selectedAlgorithm ?? "SHA1";
         const digits    = this._selectedDigits    ?? 6;
         const period    = this._selectedPeriod    ?? 30;
-        const logoSource = siteUrl || issuer;
+        const logoSource = siteUrl;
 
         if (!this._editingAccount && !secret) {
           this._setStatus("Secret key is required.", "error");

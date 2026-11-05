@@ -97,21 +97,6 @@ export default class TOTPPreferences extends ExtensionPreferences {
         });
         displayGroup.add(sortRow);
 
-        // ── Behavior group ──
-        const behaviorGroup = new Adw.PreferencesGroup({
-            title: 'Behavior',
-            description: 'Display behavior',
-        });
-        generalPage.add(behaviorGroup);
-
-        // Dark icons
-        const darkRow = new Adw.SwitchRow({
-            title: 'Dark Account Avatars',
-            subtitle: 'Force dark mode for account avatar circles',
-        });
-        settings.bind('dark-icons', darkRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        behaviorGroup.add(darkRow);
-
         // ── Dependencies group ──
         const depsGroup = new Adw.PreferencesGroup({
             title: 'Optional Features',
@@ -159,49 +144,17 @@ export default class TOTPPreferences extends ExtensionPreferences {
 
         const secGroup = new Adw.PreferencesGroup({
             title: 'Security',
-            description: 'Screen lock and clock drift settings',
+            description: 'Screen lock behavior',
         });
         securityPage.add(secGroup);
 
         // Lock on screen lock
         const lockRow = new Adw.SwitchRow({
             title: 'Lock on Screen Lock',
-            subtitle: 'Close popup and require re-auth after screen lock',
+            subtitle: 'Close the popup and clear displayed codes when the screen locks',
         });
         settings.bind('lock-on-screen-lock', lockRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         secGroup.add(lockRow);
-
-        // Clock drift
-        const driftRow = new Adw.ActionRow({
-            title: 'Clock Drift Tolerance',
-            subtitle: 'Number of time windows to check (0 = exact, 1 = ±30s)',
-        });
-        const driftSpinBtn = new Gtk.SpinButton({
-            adjustment: new Gtk.Adjustment({
-                lower: 0,
-                upper: 2,
-                step_increment: 1,
-                value: settings.get_int('clock-drift'),
-            }),
-            valign: Gtk.Align.CENTER,
-        });
-        settings.bind('clock-drift', driftSpinBtn, 'value', Gio.SettingsBindFlags.DEFAULT);
-        driftRow.add_suffix(driftSpinBtn);
-        secGroup.add(driftRow);
-
-        // ── Backup group ──
-        const backupGroup = new Adw.PreferencesGroup({
-            title: 'Backup',
-            description: 'Export and import account data',
-        });
-        securityPage.add(backupGroup);
-
-        const backupRow = new Adw.SwitchRow({
-            title: 'Enable Encrypted Backup Export',
-            subtitle: 'Allow exporting accounts as encrypted backup file',
-        });
-        settings.bind('backup-enabled', backupRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        backupGroup.add(backupRow);
 
         // ── About Page ──
         const aboutPage = new Adw.PreferencesPage({

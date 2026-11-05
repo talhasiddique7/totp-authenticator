@@ -1,126 +1,73 @@
-#!/bin/bash
-# GNOME TOTP Authenticator — Install Script
-# Usage: ./install.sh
+#!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 EXTENSION_UUID="gnome-totp-authenticator@talhasiddique7"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 EXTENSION_DIR="$HOME/.local/share/gnome-shell/extensions/$EXTENSION_UUID"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_DIR="$SCRIPT_DIR/$EXTENSION_UUID"
+REQUIRED_FILES=(extension.js metadata.json prefs.js stylesheet.css icons lib schemas ui)
 
-# Colors
-RED='\033[0;31m'
+BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'
+NC='\033[0m'
 
-echo -e "${BLUE}╔══════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   GNOME TOTP Authenticator — Installer   ║${NC}"
-echo -e "${BLUE}╚══════════════════════════════════════════╝${NC}"
-echo ""
+printf '%b\n' "${BLUE}Installing GNOME TOTP Authenticator${NC}"
 
-# ── Check GNOME Shell version ──
-echo -e "${BLUE}[1/5]${NC} Checking GNOME Shell version..."
-if command -v gnome-shell &> /dev/null; then
-    GNOME_VERSION=$(gnome-shell --version | grep -oP '\d+' | head -1)
-    echo -e "  ${GREEN}✓${NC} GNOME Shell $GNOME_VERSION detected"
-    if [ "$GNOME_VERSION" -lt 45 ]; then
-        echo -e "  ${RED}✗ GNOME Shell 45+ required. You have version $GNOME_VERSION.${NC}"
-        exit 1
-    fi
-else
-    echo -e "  ${YELLOW}⚠ Could not detect GNOME Shell version${NC}"
-fi
-
-# ── Check dependencies ──
-echo -e "${BLUE}[2/5]${NC} Checking dependencies..."
-
-MISSING_DEPS=()
-
-# Check for libsecret
-if ! pkg-config --exists libsecret-1 2>/dev/null; then
-    if ! dpkg -l | grep -q gir1.2-secret 2>/dev/null; then
-        MISSING_DEPS+=("gir1.2-secret-1")
-    fi
-fi
-echo -e "  ${GREEN}✓${NC} libsecret (GNOME Keyring)"
-
-# Check for zbar-tools (optional but recommended)
-if ! command -v zbarimg &> /dev/null; then
-    echo -e "  ${YELLOW}⚠${NC} zbar-tools not found (install for QR code scanning)"
-    echo -e "    ${YELLOW}Recommended for better experience:${NC} sudo apt install zbar-tools"
-else
-    echo -e "  ${GREEN}✓${NC} zbar-tools (QR scanning)"
-fi
-
-# Check for glib-compile-schemas
-if ! command -v glib-compile-schemas &> /dev/null; then
-    echo -e "  ${RED}✗ glib-compile-schemas not found${NC}"
-    MISSING_DEPS+=("libglib2.0-dev-bin")
-fi
-
-if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
-    echo -e "\n  ${RED}Missing required dependencies:${NC}"
-    echo -e "  Run: ${YELLOW}sudo apt install ${MISSING_DEPS[*]}${NC}"
+if [[ ! -f "$SCRIPT_DIR/metadata.json" ]]; then
+    printf '%b\n' "${RED}Run this script from a complete project checkout.${NC}" >&2
     exit 1
 fi
 
-# ── Check source directory ──
-if [ ! -d "$SOURCE_DIR" ]; then
-    # Try current directory
-    if [ -f "metadata.json" ]; then
-        SOURCE_DIR="$(pwd)"
+if command -v gnome-shell >/dev/null 2>&1; then
+    GNOME_VERSION="$(gnome-shell --version | sed -E 's/.* ([0-9]+)(\..*)?$/\1/')"
+    if [[ "$GNOME_VERSION" =~ ^[0-9]+$ ]]; then
+        if (( GNOME_VERSION < 45 )); then
+            printf '%b\n' "${RED}GNOME Shell 45 or newer is required (found $GNOME_VERSION).${NC}" >&2
+            exit 1
+        fi
+        printf '%b\n' "${GREEN}GNOME Shell $GNOME_VERSION detected.${NC}"
     else
-        echo -e "${RED}✗ Extension source not found at $SOURCE_DIR${NC}"
+        printf '%b\n' "${YELLOW}Could not parse the GNOME Shell version; continuing.${NC}"
+    fi
+else
+    printf '%b\n' "${YELLOW}GNOME Shell was not found; installing files without enabling the extension.${NC}"
+fi
+
+for command in gjs glib-compile-schemas; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+        printf '%b\n' "${RED}Required command not found: $command${NC}" >&2
         exit 1
     fi
+done
+
+if ! gjs -c 'imports.gi.Secret' >/dev/null 2>&1; then
+    printf '%b\n' "${RED}GJS libsecret bindings are required. Install libsecret and its GObject introspection bindings.${NC}" >&2
+    exit 1
 fi
 
-# ── Install extension ──
-echo -e "${BLUE}[3/5]${NC} Installing extension to $EXTENSION_DIR..."
+for item in "${REQUIRED_FILES[@]}"; do
+    if [[ ! -e "$SCRIPT_DIR/$item" ]]; then
+        printf '%b\n' "${RED}Required extension source is missing: $item${NC}" >&2
+        exit 1
+    fi
+done
 
 mkdir -p "$EXTENSION_DIR"
+for item in "${REQUIRED_FILES[@]}"; do
+    cp -R -- "$SCRIPT_DIR/$item" "$EXTENSION_DIR/"
+done
 
-# Copy all files
-cp -r "$SOURCE_DIR"/* "$EXTENSION_DIR/"
-echo -e "  ${GREEN}✓${NC} Extension files copied"
+glib-compile-schemas --strict "$EXTENSION_DIR/schemas"
+printf '%b\n' "${GREEN}Extension installed at $EXTENSION_DIR${NC}"
 
-# ── Compile GSettings schemas ──
-echo -e "${BLUE}[4/5]${NC} Compiling GSettings schemas..."
-
-if [ -d "$EXTENSION_DIR/schemas" ]; then
-    glib-compile-schemas "$EXTENSION_DIR/schemas/"
-    echo -e "  ${GREEN}✓${NC} Schemas compiled"
+if command -v gnome-extensions >/dev/null 2>&1; then
+    if gnome-extensions enable "$EXTENSION_UUID"; then
+        printf '%b\n' "${GREEN}Extension enabled.${NC}"
+    else
+        printf '%b\n' "${YELLOW}Files are installed, but automatic enabling failed. Run: gnome-extensions enable $EXTENSION_UUID${NC}"
+    fi
 else
-    echo -e "  ${YELLOW}⚠ No schemas directory found${NC}"
+    printf '%b\n' "${YELLOW}Enable the extension from GNOME Extensions after restarting the Shell.${NC}"
 fi
-
-# ── Enable extension ──
-echo -e "${BLUE}[5/5]${NC} Enabling extension..."
-
-if command -v gnome-extensions &> /dev/null; then
-    gnome-extensions enable "$EXTENSION_UUID" 2>/dev/null || true
-    echo -e "  ${GREEN}✓${NC} Extension enabled"
-else
-    echo -e "  ${YELLOW}⚠ gnome-extensions CLI not found. Enable manually in Extensions app.${NC}"
-fi
-
-# ── Done ──
-echo ""
-echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║       Installation complete! 🎉          ║${NC}"
-echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
-echo ""
-echo -e "  ${YELLOW}▶ Restart GNOME Shell:${NC}"
-echo -e "    • Wayland: Log out and log back in"
-echo -e "    • X11: Press Alt+F2, type 'r', press Enter"
-echo ""
-echo -e "  ${YELLOW}▶ Open preferences:${NC}"
-echo -e "    gnome-extensions prefs $EXTENSION_UUID"
-echo ""
-
-# Create data directory
-mkdir -p "$HOME/.local/share/gnome-totp-auth"
-echo -e "  ${GREEN}✓${NC} Data directory created at ~/.local/share/gnome-totp-auth/"

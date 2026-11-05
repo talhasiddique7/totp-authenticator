@@ -3,6 +3,7 @@
 
 import GObject from "gi://GObject";
 import St from "gi://St";
+import Clutter from "gi://Clutter";
 import * as ModalDialog from "resource:///org/gnome/shell/ui/modalDialog.js";
 
 export const ConfirmDeleteDialog = GObject.registerClass(
@@ -19,7 +20,7 @@ export const ConfirmDeleteDialog = GObject.registerClass(
       });
 
       const content = new St.BoxLayout({
-        vertical: true,
+        orientation: Clutter.Orientation.VERTICAL,
         style_class: "totp-dialog-content",
       });
 

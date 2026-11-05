@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="gnome-totp-authenticator">
-  <enum id="org.gnome.shell.extensions.gnome-totp-authenticator.SortOrder">
-    <value nick="manual" value="0"/>
-    <value nick="alphabetical" value="1"/>
-    <value nick="last-used" value="2"/>
-  </enum>
-
   <schema id="org.gnome.shell.extensions.gnome-totp-authenticator"
           path="/org/gnome/shell/extensions/gnome-totp-authenticator/">
 
@@ -33,29 +27,10 @@
       <description>Width of the popup panel in pixels (320-480).</description>
     </key>
 
-    <key name="dark-icons" type="b">
-      <default>false</default>
-      <summary>Dark account avatars</summary>
-      <description>Force dark mode styling for account avatar circles.</description>
-    </key>
-
-    <!-- Security Settings -->
-    <key name="clock-drift" type="i">
-      <default>1</default>
-      <summary>Clock drift tolerance</summary>
-      <description>Number of time windows to check for clock drift (0-2). 0 means exact match only.</description>
-    </key>
-
-    <key name="backup-enabled" type="b">
-      <default>false</default>
-      <summary>Enable backup export</summary>
-      <description>Allow exporting accounts as an encrypted backup file.</description>
-    </key>
-
     <key name="lock-on-screen-lock" type="b">
       <default>true</default>
       <summary>Lock on screen lock</summary>
-      <description>Close the popup and require re-authentication when the screen is locked and unlocked.</description>
+      <description>Close the popup and clear displayed codes when the screen locks.</description>
     </key>
 
   </schema>

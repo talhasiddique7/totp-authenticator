@@ -3,7 +3,7 @@
     "name": "TOTP Authenticator",
     "description": "A native TOTP authenticator for the GNOME desktop. Add accounts via QR code or manual entry, view live auto-refreshing OTP codes, and keep secrets stored securely in GNOME Keyring.",
     "version": 1,
-    "shell-version": ["45", "46", "47", "48", "49", "50"],
+    "shell-version": ["45", "46", "47", "48", "49", "50", "51"],
     "settings-schema": "org.gnome.shell.extensions.gnome-totp-authenticator",
     "url": "https://github.com/talhasiddique7/totp",
     "gettext-domain": "gnome-totp-authenticator",

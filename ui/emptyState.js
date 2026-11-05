@@ -16,7 +16,7 @@ export const EmptyState = GObject.registerClass({
     _init(path) {
         super._init({
             style_class: 'totp-empty-state',
-            vertical: true,
+            orientation: Clutter.Orientation.VERTICAL,
             x_expand: true,
             y_expand: true,
             x_align: Clutter.ActorAlign.CENTER,

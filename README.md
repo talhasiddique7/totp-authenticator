@@ -11,7 +11,7 @@ A native TOTP (Time-Based One-Time Password) authenticator extension for the GNO
 - **⏱ Countdown Timer** — Visual countdown arc with color transitions (blue → amber → red)
 - **🔍 Search** — Quickly filter accounts when you have many
 - **🏷 Account Logos** — Fetches and caches service favicons when a site URL is provided
-- **🎨 Customizable** — Configurable fonts, colors, popup width, and sort order
+- **🎨 Customizable** — Configurable fonts, popup width, and sort order
 - **🛡 Screen Lock Integration** — Auto-closes popup when screen locks
 
 ## 📋 Requirements
@@ -24,14 +24,14 @@ A native TOTP (Time-Based One-Time Password) authenticator extension for the GNO
 
 ### Supported GNOME Versions
 
-GNOME Shell 45, 46, 47, 48, 49, 50
+GNOME Shell 45, 46, 47, 48, 49, 50, 51
 
 ## 🚀 Installation
 
 ### Quick Install
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/talhasiddique7/totp.git
 cd totp
 chmod +x install.sh
 ./install.sh
@@ -40,15 +40,10 @@ chmod +x install.sh
 ### Manual Install
 
 ```bash
-# Copy extension files
-mkdir -p ~/.local/share/gnome-shell/extensions/gnome-totp-authenticator@local
-cp -r gnome-totp-authenticator@local/* ~/.local/share/gnome-shell/extensions/gnome-totp-authenticator@local/
-
-# Compile schemas
-glib-compile-schemas ~/.local/share/gnome-shell/extensions/gnome-totp-authenticator@local/schemas/
-
-# Enable
-gnome-extensions enable gnome-totp-authenticator@local
+# Build, install, and enable the release bundle
+make package
+gnome-extensions install --force dist/gnome-totp-authenticator@talhasiddique7.shell-extension.zip
+gnome-extensions enable gnome-totp-authenticator@talhasiddique7
 ```
 
 Then restart GNOME Shell:
@@ -96,7 +91,7 @@ sudo pacman -S zbar
 
 Open preferences via:
 ```bash
-gnome-extensions prefs gnome-totp-authenticator@local
+gnome-extensions prefs gnome-totp-authenticator@talhasiddique7
 ```
 
 Or click the ⚙ gear icon in the popup header.
@@ -116,8 +111,7 @@ Or click the ⚙ gear icon in the popup header.
 | Code Size | 28pt | Font size for OTP codes |
 | Popup Width | 360px | Dropdown panel width (320-480) |
 | Sort Order | Manual | Manual, Alphabetical, or Last Used |
-| Clock Drift | ±1 window | Tolerance for clock skew |
-| Lock on Screen Lock | On | Close popup when screen locks |
+| Lock on Screen Lock | On | Close the popup and clear displayed codes when the screen locks |
 
 ## 📜 License
 
